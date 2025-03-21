@@ -38,7 +38,14 @@ if selected_chart == "Perbandingan Jumlah Penyewaan Sepeda Tahun 2011 dan 2012":
         st.markdown("<p>Perbandingan Jumlah Penyewaan Sepeda Tahun 2011 dan 2012</p>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            year_counts_df = day_df.groupby(by='yr').cnt.sum()
+            season_mapping = {1: "Spring", 2: "Summer", 3: "Fall", 4: "Winter"}
+            selected_season = st.selectbox("Pilih Musim:", ["Semua"] + list(season_mapping.values()))
+
+            filtered_df = day_df.copy()
+            if selected_season != "Semua":
+                filtered_df = filtered_df[filtered_df["season"].map(season_mapping) == selected_season]
+
+            year_counts_df = filtered_df.groupby(by='yr').cnt.sum()
             year_counts_df.index = year_counts_df.index.map({0: 2011, 1: 2012})
             fig, ax = plt.subplots(figsize=(10, 5))
             year_counts_df.plot(kind='bar', ax=ax)
@@ -49,13 +56,24 @@ if selected_chart == "Perbandingan Jumlah Penyewaan Sepeda Tahun 2011 dan 2012":
             st.pyplot(fig)
 
         with col2:
+            selected_year = st.selectbox("Pilih Tahun:", ["Semua", 2011, 2012])
+
             seasonal_counts = day_df.groupby(['yr', 'season'])['cnt'].sum().reset_index()
             seasonal_counts_pivot = seasonal_counts.pivot(index='season', columns='yr', values='cnt')
             seasonal_counts_pivot['selisih'] = seasonal_counts_pivot[1] - seasonal_counts_pivot[0]
 
             seasonal_counts_pivot = seasonal_counts_pivot.rename(index={1: 'Spring', 2: 'Summer', 3: 'Fall', 4: 'Winter'})
+
+            if selected_year in [2011, 2012]:
+                if selected_year == 2011:
+                    year_col = 0
+                else:
+                    year_col = 1
+            else:
+                year_col = 'selisih'
+
             fig, ax = plt.subplots(figsize=(10, 5))
-            seasonal_counts_pivot['selisih'].plot(kind='line', ax=ax, color='red')
+            seasonal_counts_pivot[year_col].plot(kind='line', ax=ax, color='red')
             ax.set_xlabel('Musim', size=12)
             ax.set_ylabel('Selisih Penyewaan Sepeda', size=12)
             ax.set_title('Selisih Penyewaan Sepeda per Musim')
@@ -65,7 +83,22 @@ if selected_chart == "Perbandingan Jumlah Penyewaan Sepeda Tahun 2011 dan 2012":
 elif selected_chart == "Persentase Jumlah Penyewaan Sepeda pada Weekday dan Weekend":
     with st.container():
         st.markdown("<p>Persentase Jumlah Penyewaan Sepeda pada Weekday dan Weekend</p>", unsafe_allow_html=True)
-        workingday_counts_df = day_df.groupby(by='workingday').cnt.sum()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_year = st.selectbox("Pilih Tahun:", [2011, 2012])
+
+        with col2:
+            months = [
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            ]
+            selected_month = st.selectbox("Pilih Bulan:", months)
+            month_number = months.index(selected_month) + 1 
+
+        filtered_df = day_df[(day_df["yr"] == [2011, 2012].index(selected_year)) & (day_df["mnth"] == month_number)]
+
+        workingday_counts_df = filtered_df.groupby(by='workingday').cnt.sum()
         workingday_counts_df = workingday_counts_df.rename({0: 'Weekend', 1: 'Weekday'})
 
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -77,12 +110,19 @@ elif selected_chart == "Persentase Jumlah Penyewaan Sepeda pada Weekday dan Week
 elif selected_chart == "Pengaruh Kecepatan Angin Terhadap Jumlah Penyewaan Sepeda":
     with st.container():
         st.markdown("<p>Pengaruh Kecepatan Angin Terhadap Jumlah Penyewaan Sepeda</p>", unsafe_allow_html=True)
+        min_wind, max_wind = st.slider(
+            "Pilih Rentang Kecepatan Angin:",
+            min_value=float(day_df["windspeed"].min()),
+            max_value=float(day_df["windspeed"].max()),
+            value=(0.0, 1.0)
+        )
+
+        filtered_df = day_df[(day_df["windspeed"] >= min_wind) & (day_df["windspeed"] <= max_wind)]
         bins = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 1]
         labels = ['0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5+']
-        day_df['windspeed_bin'] = pd.cut(day_df['windspeed'], bins=bins, labels=labels)
+        filtered_df['windspeed_bin'] = pd.cut(filtered_df['windspeed'], bins=bins, labels=labels)
 
-        day_df.groupby('windspeed_bin', observed=False)['cnt'].mean().sort_values(ascending=False)
-        windspeed_counts_df = day_df.groupby('windspeed_bin', observed=False)['cnt'].mean().sort_values(ascending=False)
+        windspeed_counts_df = filtered_df.groupby('windspeed_bin', observed=False)['cnt'].mean().sort_values(ascending=False)
         fig, ax = plt.subplots(figsize=(10, 5))
         windspeed_counts_df.plot(kind='bar', ax=ax)
         ax.set_xticklabels(windspeed_counts_df.index, rotation=0)
@@ -94,7 +134,15 @@ elif selected_chart == "Pengaruh Kecepatan Angin Terhadap Jumlah Penyewaan Seped
 elif selected_chart == "Rata-Rata Jumlah Penyewaan Sepeda Untuk Setiap Jam":
     with st.container():
         st.markdown("<p>Rata-Rata Jumlah Penyewaan Sepeda Untuk Setiap Jam</p>", unsafe_allow_html=True)
-        hour_counts_df = hour_df.groupby(by='hr').cnt.mean()
+
+        selected_day = st.selectbox("Pilih Hari:", ["Semua", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"])
+    
+        filtered_df = hour_df.copy()
+        if selected_day != "Semua":
+            day_mapping = {"Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6}
+            filtered_df = filtered_df[filtered_df["weekday"] == day_mapping[selected_day]]
+
+        hour_counts_df = filtered_df.groupby(by='hr').cnt.mean()
 
         fig, ax = plt.subplots(figsize=(10, 5))
         hour_counts_df.plot(kind='line', ax=ax, color='green')
@@ -108,7 +156,24 @@ elif selected_chart == "Rata-Rata Jumlah Penyewaan Sepeda Untuk Setiap Jam":
 elif selected_chart == "Rata-Rata Jumlah Penyewaan Sepeda Untuk Setiap Hari":
     with st.container():
         st.markdown("<p>Rata-Rata Jumlah Penyewaan Sepeda Untuk Setiap Hari</p>", unsafe_allow_html=True)
-        weekday_counts_df = day_df.groupby(by='weekday').cnt.mean()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_year = st.selectbox("Pilih Tahun:", ["Semua", 2011, 2012])
+
+        with col2:
+            season_mapping = {1: "Spring", 2: "Summer", 3: "Fall", 4: "Winter"}
+            selected_season = st.selectbox("Pilih Musim:", ["Semua"] + list(season_mapping.values()))
+
+        filtered_df = day_df.copy()
+        if selected_year in [2011, 2012]:
+            filtered_df = filtered_df[filtered_df["yr"] == (selected_year - 2011)]
+
+        if selected_season != "Semua":
+            filtered_df = filtered_df[filtered_df["season"].map(season_mapping) == selected_season]
+
+
+        weekday_counts_df = filtered_df.groupby(by='weekday').cnt.mean()
         weekday_counts_df = weekday_counts_df.rename({0: 'Minggu', 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu'})
         fig, ax = plt.subplots(figsize=(10, 5))
         weekday_counts_df.plot(
